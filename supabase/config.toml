@@ -1,0 +1,12 @@
+project_id = "construction-crm"
+
+[auth]
+site_url = "http://localhost:5173"
+enable_signup = false
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = false
+
+[db.seed]
+enabled = false
