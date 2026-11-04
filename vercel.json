@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "VITE_SUPABASE_URL=\"${VITE_SUPABASE_URL:-$SUPABASE_URL}\" VITE_SUPABASE_PUBLISHABLE_KEY=\"${VITE_SUPABASE_PUBLISHABLE_KEY:-$SUPABASE_PUBLISHABLE_KEY}\" npm run build"
+}
