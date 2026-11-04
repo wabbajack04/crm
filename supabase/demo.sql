@@ -39,16 +39,16 @@ begin
       continue;
     end if;
     perform set_config('request.jwt.claim.sub', task.assignee_id::text, true);
-    perform public.transition_task(task.id, 'in_progress');
+    perform public.transition_task(task.id, 'in_progress', 0);
     if task.title = 'Принять арматуру' then
       continue;
     end if;
-    perform public.transition_task(task.id, 'review');
+    perform public.transition_task(task.id, 'review', 1);
     perform set_config('request.jwt.claim.sub', manager::text, true);
     if task.title = 'Подготовить акт по электрике' then
-      perform public.transition_task(task.id, 'revision', 'Добавьте дату осмотра и номер щита.');
+      perform public.transition_task(task.id, 'revision', 2, 'Добавьте дату осмотра и номер щита.');
     elsif task.title = 'Сверить схему движения техники' then
-      perform public.transition_task(task.id, 'accepted');
+      perform public.transition_task(task.id, 'accepted', 2);
     end if;
   end loop;
 end;

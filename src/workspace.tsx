@@ -6,7 +6,7 @@ type Profile = { id: string; full_name: string; role: 'manager' | 'worker' }
 type Project = { id: string; name: string; address: string }
 type Task = {
   id: string; project_id: string; title: string; description: string; assignee_id: string
-  author_id: string; status: Status; created_at: string
+  author_id: string; status: Status; status_version: number; created_at: string
 }
 type History = {
   id: number; task_id: string; actor_id: string; from_status: Status | null
@@ -20,7 +20,7 @@ const labels: Record<Status, string> = {
   new: 'Новая', in_progress: 'В работе', review: 'На проверке', accepted: 'Принята', revision: 'На доработке',
 }
 const date = new Intl.DateTimeFormat('ru', { dateStyle: 'medium', timeStyle: 'short' })
-const taskColumns = 'id,project_id,title,description,assignee_id,author_id,status,created_at'
+const taskColumns = 'id,project_id,title,description,assignee_id,author_id,status,status_version,created_at'
 
 async function allRows<T>(read: (from: number, to: number) => PromiseLike<Result<T>>) {
   const rows: T[] = []
@@ -74,7 +74,7 @@ export function Workspace({ db, userId }: { db: SupabaseClient; userId: string }
   const [busy, setBusy] = useState(false)
   const [refresh, setRefresh] = useState(0)
   const [editor, setEditor] = useState<Editor | null>(null)
-  const [revision, setRevision] = useState(false)
+  const [revisionVersion, setRevisionVersion] = useState<number | null>(null)
   const [, page, id] = route.replace(/^#/, '').split('/')
   const taskId = page === 'task' ? id : undefined
 
@@ -82,13 +82,21 @@ export function Workspace({ db, userId }: { db: SupabaseClient; userId: string }
     function navigate() {
       setRoute(window.location.hash)
       setEditor(null)
-      setRevision(false)
+      setRevisionVersion(null)
       setError('')
       setHistory(null)
       setHistoryError('')
+      setRefresh(value => value + 1)
+    }
+    function refreshOnFocus() {
+      setRefresh(value => value + 1)
     }
     window.addEventListener('hashchange', navigate)
-    return () => window.removeEventListener('hashchange', navigate)
+    window.addEventListener('focus', refreshOnFocus)
+    return () => {
+      window.removeEventListener('hashchange', navigate)
+      window.removeEventListener('focus', refreshOnFocus)
+    }
   }, [])
 
   useEffect(() => {
@@ -158,8 +166,9 @@ export function Workspace({ db, userId }: { db: SupabaseClient; userId: string }
   }
 
   function transition(task: Task, status: Status, comment?: string) {
-    void run(() => db.rpc('transition_task', { p_task_id: task.id, p_to: status, p_comment: comment }),
-      () => setRevision(false))
+    void run(() => db.rpc('transition_task', {
+      p_task_id: task.id, p_to: status, p_expected_version: task.status_version, p_comment: comment,
+    }), () => setRevisionVersion(null))
   }
 
   let screen: ReactNode = <p role="status">Загружаем рабочее пространство…</p>
@@ -221,6 +230,7 @@ export function Workspace({ db, userId }: { db: SupabaseClient; userId: string }
     const canStart = assigned && (task.status === 'new' || task.status === 'revision')
     const canReview = assigned && task.status === 'in_progress'
     const canDecide = own && task.status === 'review'
+    const revision = revisionVersion === task.status_version
     screen = <>
       <a className="back" href={'#/project/' + task.project_id}>← {taskProject?.name ?? 'Объект'}</a>
       <section className="panel task-card">
@@ -236,7 +246,7 @@ export function Workspace({ db, userId }: { db: SupabaseClient; userId: string }
           {canReview && <button className="primary" disabled={busy} onClick={() => transition(task, 'review')}>Отправить на проверку</button>}
           {canDecide && <>
             <button className="primary" disabled={busy} onClick={() => transition(task, 'accepted')}>Принять</button>
-            <button disabled={busy || revision} onClick={() => setRevision(true)}>Вернуть на доработку</button>
+            <button disabled={busy || revision} onClick={() => setRevisionVersion(task.status_version)}>Вернуть на доработку</button>
           </>}
           {own && task.status === 'new' && <button disabled={busy}
             onClick={() => setEditor({ type: 'task', value: task, projectId: task.project_id })}>Редактировать</button>}
@@ -255,7 +265,7 @@ export function Workspace({ db, userId }: { db: SupabaseClient; userId: string }
           <label>Причина возврата<textarea name="note" maxLength={2000} required autoFocus /></label>
           <div className="actions">
             <button className="primary" disabled={busy}>Подтвердить возврат</button>
-            <button type="button" disabled={busy} onClick={() => { setRevision(false); setError('') }}>Отмена</button>
+            <button type="button" disabled={busy} onClick={() => { setRevisionVersion(null); setError('') }}>Отмена</button>
           </div>
         </form>}
       </section>
